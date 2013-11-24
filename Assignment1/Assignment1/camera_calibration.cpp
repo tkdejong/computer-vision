@@ -210,6 +210,9 @@ enum { DETECTION = 0, CAPTURING = 1, CALIBRATED = 2 };
 bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, Mat& distCoeffs,
                            vector<vector<Point2f> > imagePoints );
 
+void cubeDraw(Mat &view, vector<Point> CubeBuff);
+void axisDraw(Mat &view, vector<Point> AxisBuff);
+
 int main(int argc, char* argv[])
 {
     help();
@@ -246,17 +249,30 @@ int main(int argc, char* argv[])
       view = s.nextImage();
 
       //-----  If no more image, or got enough, then stop calibration and show result -------------
+	  //!every step we calibrate including the final step. 
+	  //!presumedly the calibration doesn't quite work when we perform it first time.
+	 
       if( mode == CAPTURING && imagePoints.size() >= (unsigned)s.nrFrames )
       {
+		  //!check to see if we're capturing webcam data
+
+		  //!note, we don't actually send the image when we "calibrate".
+		  //!imagepoints notably is the data found in a different part of the program
+		  //!that part being the "find[stuff]" functions, in our case "findcheckerboardcorners"
+		  //!that function is later on in the code.
+		  //!upon further inspection i'm less certain about it though i still suspect my previous observation to be correct
+		  //!It is however a moot point for our purposes (since we do not need the imagepoints nor the location where it is used)
           if( runCalibrationAndSave(s, imageSize,  cameraMatrix, distCoeffs, imagePoints))
               mode = CALIBRATED;
           else
               mode = DETECTION;
       }
       if(view.empty())          // If no more images then run calibration, save and stop loop.
-      {
+      {							//!the above is confusing because the loop isn't actually ended here, ever
+								//!instead the it ends the current cycle of the loop and saves the last results to the output file
             if( imagePoints.size() > 0 )
                 runCalibrationAndSave(s, imageSize,  cameraMatrix, distCoeffs, imagePoints);
+			
             break;
       }
 
@@ -268,6 +284,7 @@ int main(int argc, char* argv[])
 
         bool found;
         switch( s.calibrationPattern ) // Find feature points on the input format
+									   //! not sure why it checks this every single time in the loop since this is a constant variable
         {
         case Settings::CHESSBOARD:
             found = findChessboardCorners( view, s.boardSize, pointBuf,
@@ -283,7 +300,7 @@ int main(int argc, char* argv[])
             found = false;
             break;
         }
-
+		//!if the in the above lines calibration has been succesfull then we'll be able to find the correct points on the board.
         if ( found)                // If done with success,
         {
               // improve the found corners' coordinate accuracy for chessboard
@@ -303,8 +320,13 @@ int main(int argc, char* argv[])
                     blinkOutput = s.inputCapture.isOpened();
                 }
 
-                // Draw the corners.
+                // Draw the corners. !(note that the points are already calculated)
+				//!this is also the point where we want to draw our output 
+				//!(note that we don't actually output the resulting image untill later_
                 drawChessboardCorners( view, s.boardSize, Mat(pointBuf), found );
+				//drawAxis(view, AxisPointBuff)
+				//drawCube(view, CubePointBuff)
+				char c = (char)waitKey();
         }
 
         //----------------------------- Output Text ------------------------------------------------
@@ -335,8 +357,11 @@ int main(int argc, char* argv[])
         }
 
         //------------------------------ Show image and check for input commands -------------------
+		//!this is where the image will be drawn
+		//!this is neither the position where we calculate the positions or modify the output image as the required info is gone
+		//!not to mention it would be an improper location (though i suppose that's a minor grievance)
         imshow("Image View", view);
-        char key = (char)waitKey(s.inputCapture.isOpened() ? 50 : s.delay);
+        char key = (char)waitKey(s.inputCapture.isOpened() ? 5000 : s.delay);
 
         if( key  == ESC_KEY )
             break;
@@ -389,6 +414,9 @@ static double computeReprojectionErrors( const vector<vector<Point3f> >& objectP
 
     for( i = 0; i < (int)objectPoints.size(); ++i )
     {
+		//!! SUPER IMPORTANT SHIT RIGHT HERE! THIS MAY BE THE KEY
+		//! note this proves that the camera isn't the projection matrix but the intrinsics
+		//! meanwhile the rvec and tvec are the extrinsics
         projectPoints( Mat(objectPoints[i]), rvecs[i], tvecs[i], cameraMatrix,
                        distCoeffs, imagePoints2);
         err = norm(Mat(imagePoints[i]), Mat(imagePoints2), CV_L2);
@@ -425,7 +453,14 @@ static void calcBoardCornerPositions(Size boardSize, float squareSize, vector<Po
         break;
     }
 }
+//!defining the projection functions we're going to use, note that i'll write a big amounts of comments on the function and it's input later
+void projectAxis(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &AxisPointBuffer);
+void projectCube(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &CubePointBuffer);
 
+
+
+//! note you'll have to modify this to get the projected cube and axis co-ordinates to the drawing function
+//! you'll want to initialise them early on in the matrix, remember to clean them out after you've finished with a cycle
 static bool runCalibration( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat& distCoeffs,
                             vector<vector<Point2f> > imagePoints, vector<Mat>& rvecs, vector<Mat>& tvecs,
                             vector<float>& reprojErrs,  double& totalAvgErr)
@@ -445,8 +480,17 @@ static bool runCalibration( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat
     //Find intrinsic and extrinsic camera parameters
     double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix,
                                  distCoeffs, rvecs, tvecs, s.flag|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+	//!what is the distance coeffecient (distCoeffs)?
+	//! at this point we have the required information to calculate the relevant points we want to draw it would probably be best if we perform the calculation roughly around here
+    //! just perform the correct mathematical equations on the points we want to draw
+	//! as such you'll want to read up on the matrix implementation of this framework.
 
-    cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
+	//! as far as i've been able to confirm the camera rvec and tvec are the values that we need (the intrinsics and extrinsics)
+	//! question is how to get at them
+
+	//! ProjectAxis(r,t,cameraMatrix, AxisPointBuffer);
+	//! ProjectCube(r,t,cameraMatrix, CubePointBuffer);
+	cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
 
     bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
 
@@ -456,7 +500,39 @@ static bool runCalibration( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat
     return ok;
 }
 
+//!note the fact this is currently empty REMEMBER TO DESCRIBE WHAT YOURE DOING IN COMMENTS AS WELL we will lose points if you don't
+void projectAxis(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &AxisPointBuffer)
+{
+	//!3d points (1,0,0,1), (0,1,0,1), (0,0,1,0)
+	//!3d origin (0,0,0,1);
+	//!insert maths here
+}
+
+void projectCube(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &AxisPointBuffer)
+{
+	
+	//!3d points (0,0,0,1) (10,0,0,1),(0,10,0,1), (10,10,0,1)-(0,0,10,1) (10,0,10,1),(0,10,10,1), (10,10,10,1)
+	//!note the length value (here 10) is arbitrary.
+	//!insert maths here
+	//!Remember to use P= K*[r,t]
+	//!where K is camera matrix, r and t are given but need to be appended
+	//!then P*x
+	//!where x is the point we want to transform
+	//
+}
+
+void drawAxis(Mat &view, vector<Point> AxisPointBuff)
+{
+
+	//!the drawing itself should be easy enough when we correctly get the points
+}
+void drawCube(Mat &view, vector<Point> CubePointBuff)
+{
+	//!just make sure that each axis and the cube are distinctly colored
+}
+
 // Print camera parameters to the output file
+
 static void saveCameraParams( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat& distCoeffs,
                               const vector<Mat>& rvecs, const vector<Mat>& tvecs,
                               const vector<float>& reprojErrs, const vector<vector<Point2f> >& imagePoints,
