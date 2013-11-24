@@ -324,8 +324,8 @@ int main(int argc, char* argv[])
 				//!this is also the point where we want to draw our output 
 				//!(note that we don't actually output the resulting image untill later_
                 drawChessboardCorners( view, s.boardSize, Mat(pointBuf), found );
-				//drawAxis(view, AxisPointBuff)
-				//drawCube(view, CubePointBuff)
+				//!drawAxis(view, AxisPointBuff)
+				//!drawCube(view, CubePointBuff)
 				char c = (char)waitKey();
         }
 
@@ -518,7 +518,7 @@ void projectCube(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &
 	//!where K is camera matrix, r and t are given but need to be appended
 	//!then P*x
 	//!where x is the point we want to transform
-	//
+	
 }
 
 void drawAxis(Mat &view, vector<Point> AxisPointBuff)
