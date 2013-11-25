@@ -69,7 +69,9 @@
     <ClCompile Include="camera_calibration.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Xml Include="default.xml" />
+    <Xml Include="default.xml">
+      <SubType>Designer</SubType>
+    </Xml>
     <Xml Include="images.xml" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -207,11 +207,11 @@ static void read(const FileNode& node, Settings& x, const Settings& default_valu
 
 enum { DETECTION = 0, CAPTURING = 1, CALIBRATED = 2 };
 
-bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, Mat& distCoeffs,
-                           vector<vector<Point2f> > imagePoints );
+bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, vector<Mat>&  rvecs, vector<Mat>&  tvecs,
+						   Mat& distCoeffs, vector<vector<Point2f> > imagePoints );
+//Post-processing function, to add e.g. 3D drawings to an image
+void postProcessImage(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoeffs);
 
-void cubeDraw(Mat &view, vector<Point> CubeBuff);
-void axisDraw(Mat &view, vector<Point> AxisBuff);
 
 int main(int argc, char* argv[])
 {
@@ -235,7 +235,10 @@ int main(int argc, char* argv[])
 
     vector<vector<Point2f> > imagePoints;
     Mat cameraMatrix, distCoeffs;
+	//Keep track of the [R t] matrix components in each view
+	vector<Mat> rvecs, tvecs;
     Size imageSize;
+	//!I think the statement below should be reversed (DETECTION : CAPTURING)
     int mode = s.inputType == Settings::IMAGE_LIST ? CAPTURING : DETECTION;
     clock_t prevTimestamp = 0;
     const Scalar RED(0,0,255), GREEN(0,255,0);
@@ -249,7 +252,7 @@ int main(int argc, char* argv[])
       view = s.nextImage();
 
       //-----  If no more image, or got enough, then stop calibration and show result -------------
-	  //!every step we calibrate including the final step. 
+	  //!every step we calibrate including the final step. -> at least for an image list, calibration is only done once
 	  //!presumedly the calibration doesn't quite work when we perform it first time.
 	 
       if( mode == CAPTURING && imagePoints.size() >= (unsigned)s.nrFrames )
@@ -262,7 +265,7 @@ int main(int argc, char* argv[])
 		  //!that function is later on in the code.
 		  //!upon further inspection i'm less certain about it though i still suspect my previous observation to be correct
 		  //!It is however a moot point for our purposes (since we do not need the imagepoints nor the location where it is used)
-          if( runCalibrationAndSave(s, imageSize,  cameraMatrix, distCoeffs, imagePoints))
+          if( runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints))
               mode = CALIBRATED;
           else
               mode = DETECTION;
@@ -271,7 +274,7 @@ int main(int argc, char* argv[])
       {							//!the above is confusing because the loop isn't actually ended here, ever
 								//!instead the it ends the current cycle of the loop and saves the last results to the output file
             if( imagePoints.size() > 0 )
-                runCalibrationAndSave(s, imageSize,  cameraMatrix, distCoeffs, imagePoints);
+                runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints);
 			
             break;
       }
@@ -376,6 +379,29 @@ int main(int argc, char* argv[])
         }
     }
 
+	// ----------------------------Show the postprocessed images -----------------------------------
+	Mat image;
+	for(int imgIndex = 0; imgIndex < (int) s.imageList.size(); imgIndex++ )
+	{
+		//Skip the first image, because no calibration data has been recorded for it.
+ 		if (imgIndex == 0)
+			continue;
+		//Read the image from the recorded list
+		image = imread(s.imageList[imgIndex]);
+		if(image.empty())
+			continue;
+
+		//Do the desired postprocessing of the image
+		postProcessImage(image, cameraMatrix, rvecs[imgIndex - 1], tvecs[imgIndex - 1], distCoeffs);
+
+		//Show the image, wait for input
+		
+		imshow("Image View", image);
+		char c = (char)waitKey();
+		if( c  == ESC_KEY || c == 'q' || c == 'Q' )
+			break;
+    }
+
     // -----------------------Show the undistorted image for the image list ------------------------
     if( s.inputType == Settings::IMAGE_LIST && s.showUndistorsed )
     {
@@ -453,10 +479,6 @@ static void calcBoardCornerPositions(Size boardSize, float squareSize, vector<Po
         break;
     }
 }
-//!defining the projection functions we're going to use, note that i'll write a big amounts of comments on the function and it's input later
-void projectAxis(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &AxisPointBuffer);
-void projectCube(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &CubePointBuffer);
-
 
 
 //! note you'll have to modify this to get the projected cube and axis co-ordinates to the drawing function
@@ -480,7 +502,7 @@ static bool runCalibration( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat
     //Find intrinsic and extrinsic camera parameters
     double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix,
                                  distCoeffs, rvecs, tvecs, s.flag|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-	//!what is the distance coeffecient (distCoeffs)?
+	//!what is the distance coeffecient (distCoeffs)? -> Distortion coefficients, apparently
 	//! at this point we have the required information to calculate the relevant points we want to draw it would probably be best if we perform the calculation roughly around here
     //! just perform the correct mathematical equations on the points we want to draw
 	//! as such you'll want to read up on the matrix implementation of this framework.
@@ -500,39 +522,7 @@ static bool runCalibration( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat
     return ok;
 }
 
-//!note the fact this is currently empty REMEMBER TO DESCRIBE WHAT YOURE DOING IN COMMENTS AS WELL we will lose points if you don't
-void projectAxis(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &AxisPointBuffer)
-{
-	//!3d points (1,0,0,1), (0,1,0,1), (0,0,1,0)
-	//!3d origin (0,0,0,1);
-	//!insert maths here
-}
-
-void projectCube(vector<Mat> r, vector<Mat> t, Mat cameraMatrix, vector<Point> &AxisPointBuffer)
-{
-	
-	//!3d points (0,0,0,1) (10,0,0,1),(0,10,0,1), (10,10,0,1)-(0,0,10,1) (10,0,10,1),(0,10,10,1), (10,10,10,1)
-	//!note the length value (here 10) is arbitrary.
-	//!insert maths here
-	//!Remember to use P= K*[r,t]
-	//!where K is camera matrix, r and t are given but need to be appended
-	//!then P*x
-	//!where x is the point we want to transform
-	
-}
-
-void drawAxis(Mat &view, vector<Point> AxisPointBuff)
-{
-
-	//!the drawing itself should be easy enough when we correctly get the points
-}
-void drawCube(Mat &view, vector<Point> CubePointBuff)
-{
-	//!just make sure that each axis and the cube are distinctly colored
-}
-
 // Print camera parameters to the output file
-
 static void saveCameraParams( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat& distCoeffs,
                               const vector<Mat>& rvecs, const vector<Mat>& tvecs,
                               const vector<float>& reprojErrs, const vector<vector<Point2f> >& imagePoints,
@@ -611,9 +601,13 @@ static void saveCameraParams( Settings& s, Size& imageSize, Mat& cameraMatrix, M
     }
 }
 
-bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, Mat& distCoeffs,vector<vector<Point2f> > imagePoints )
+/*
+	Pass all the calibration parameters (also rvecs and tvecs) that are needed elsewhere,
+	and save them to file.
+*/
+bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, vector<Mat>&  rvecs, vector<Mat>&  tvecs,
+						   Mat& distCoeffs,vector<vector<Point2f> > imagePoints )
 {
-    vector<Mat> rvecs, tvecs;
     vector<float> reprojErrs;
     double totalAvgErr = 0;
 
@@ -626,4 +620,50 @@ bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, Mat&
         saveCameraParams( s, imageSize, cameraMatrix, distCoeffs, rvecs ,tvecs, reprojErrs,
                             imagePoints, totalAvgErr);
     return ok;
+}
+
+
+// ---------- Our (post-processing) functions -------------
+
+//needs some comments
+void projectPointsExplicit(vector<Point3f>& inPoints, Mat& K, Mat& rotVector, Mat& t, Mat& distCoeffs, vector<Point2f>& outPoints)
+{
+	//!insert maths here
+	//!for now, simply use opencv built-in projection function
+	//!but if it works by explicitly using the formula, we get more points!
+	projectPoints(inPoints, rotVector, t, K,
+                       distCoeffs, outPoints);
+}
+
+//Draw world coordinate axes
+void drawAxes(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoeffs,
+			  float length)
+{	
+	//Define the (world) points needed to draw coordinate axes
+	vector<Point3f> points (4);
+	points[0] = Point3f(0, 0, 0);
+	points[1] = Point3f(length, 0, 0);
+	points[2] = Point3f(0, length, 0);
+	points[3] = Point3f(0, 0, length);
+
+	//Transform the points from world to image coordinates
+	vector<Point2f> transformedPoints (4);
+	projectPointsExplicit(points, cameraMatrix, rvec, tvec, distCoeffs, transformedPoints);
+
+	//Draw lines between the transformed points
+	line(image, transformedPoints[0], transformedPoints[1], Scalar(255, 0, 0), 1, 8);
+	line(image, transformedPoints[0], transformedPoints[2], Scalar(0, 255, 0), 1, 8);
+	line(image, transformedPoints[0], transformedPoints[3], Scalar(0, 0, 255), 1, 8);
+}
+
+void drawCube(Mat& image, Mat& cameraMatrix, vector<Mat>& rvecs, vector<Mat>& tvecs, Mat& distCoeffs,
+			  float size)
+{
+	//!just make sure that each axis and the cube are distinctly colored
+}
+
+//needs some comments
+void postProcessImage(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoeffs)
+{
+	drawAxes(image, cameraMatrix, rvec, tvec, distCoeffs, 50);
 }
