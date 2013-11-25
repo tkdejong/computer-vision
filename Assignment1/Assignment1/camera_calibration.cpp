@@ -625,17 +625,84 @@ bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, vect
 
 // ---------- Our (post-processing) functions -------------
 
-//needs some comments
+//this is where the magic happens
+//the comments inside the function will give you the info you need
 void projectPointsExplicit(vector<Point3f>& inPoints, Mat& K, Mat& rotVector, Mat& t, Mat& distCoeffs, vector<Point2f>& outPoints)
 {
 	//!insert maths here
 	//!for now, simply use opencv built-in projection function
 	//!but if it works by explicitly using the formula, we get more points!
-	projectPoints(inPoints, rotVector, t, K,
-                       distCoeffs, outPoints);
-}
+	
+	//the old LAME implementation, instead of the NEW HOT N SEXY implementation
+	//projectPoints(inPoints, rotVector, t, K, distCoeffs, outPoints);
+	
+	cout<< endl << rotVector<<endl<<endl;
 
-//Draw world coordinate axes
+	//note how huge the translation vector is;
+	cout<< endl << t<<endl<<endl;
+	
+	//initialise the output data.
+	outPoints = vector<Point2f>(inPoints.size());
+	for( int i =0; i<inPoints.size(); i++)
+	{
+
+    //note that we have the rotation vector but not the rotation MATRIX, which we need, we will solve this first.
+	Mat r;
+	//this is handeled by an internal function because of pragmatism, also it's not strictly been defined that we need to do this by hand
+	Rodrigues(rotVector,r);
+	
+	//output debug info
+	cout <<endl << r << endl <<endl;
+	// [r,t]= Ex
+	//i.e, concatenate r and t horizontally
+	Mat Ex; 
+	//again we use a function because filling a new 3*4  matrix by hand with the values of r on the first 3*3 and the values of t on the final 3*1 would be unpragmatic and also really silly
+	hconcat(r,t,Ex);
+
+	//more debug output
+	cout << Ex << endl <<endl;
+
+	//K* Ex = P
+	//multiply our intrinsics and extrinsics ( i may have switched up the names though please doublecheck, Tim)
+	Mat P = K * Ex;
+
+	//again we output debug info
+	cout << P << endl <<endl;
+
+	//P*vectorWORLD = vectorIMAGE
+	//now we apply the transformation to our 3d point
+
+	//first we retrieve the 3d point
+	Mat input = (Mat_<double>(4,1) << inPoints[i].x,inPoints[i].y,inPoints[i].z,1);
+	//debug print
+	cout << input << endl <<endl;
+	
+	//we use a matrix but since it's a 3*1 matrix it's functionally the same as a vector.
+	Mat output;
+	//apply actual transformation
+	output = P*input;
+	
+	//DEBUG INFO!
+	cout << output << endl <<endl;
+
+	//Retrieve data from the output matrix/vector
+	double x=output.at<double>(0,0);
+	double y= output.at<double>(1,0);
+	double z= output.at<double>(2,0);
+
+	//we now have the values of z(x,y,1)
+	//so we devide by z and remove the third axis (since we don't need it after this)
+	double xMod = x/z;
+	double yMod = y/z;
+
+	//we save the output value so we can use it in the drawing logic
+	outPoints[i] = Point(xMod, yMod);
+
+	}
+
+}
+//drawing logic for drawing the axes of our "world" frame, note that we perform a projection inside the drawing logic, we could seperate this and may still do so
+//as such we don't just supply the image and points we need to draw, instead we give the camera intrinsics and extrinsics, we also pass a size parameter that sets up the length of the axes
 void drawAxes(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoeffs,
 			  float length)
 {	
@@ -644,26 +711,75 @@ void drawAxes(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoef
 	points[0] = Point3f(0, 0, 0);
 	points[1] = Point3f(length, 0, 0);
 	points[2] = Point3f(0, length, 0);
-	points[3] = Point3f(0, 0, length);
+	points[3] = Point3f(0, 0, -length);
 
 	//Transform the points from world to image coordinates
 	vector<Point2f> transformedPoints (4);
 	projectPointsExplicit(points, cameraMatrix, rvec, tvec, distCoeffs, transformedPoints);
 
-	//Draw lines between the transformed points
-	line(image, transformedPoints[0], transformedPoints[1], Scalar(255, 0, 0), 1, 8);
-	line(image, transformedPoints[0], transformedPoints[2], Scalar(0, 255, 0), 1, 8);
-	line(image, transformedPoints[0], transformedPoints[3], Scalar(0, 0, 255), 1, 8);
+	//Draw lines of the axes
+
+	line(image, transformedPoints[0], transformedPoints[1], Scalar(255, 0, 0), 4, 8);
+	line(image, transformedPoints[0], transformedPoints[2], Scalar(0, 255, 0), 4, 8);
+	line(image, transformedPoints[0], transformedPoints[3], Scalar(0, 0, 255), 4, 8);
 }
 
-void drawCube(Mat& image, Mat& cameraMatrix, vector<Mat>& rvecs, vector<Mat>& tvecs, Mat& distCoeffs,
+//drawing logic for drawing the cube on the origin, note that we perform a projection inside the drawing logic, we could seperate this and may still do so
+//as such we don't just supply the image and points we need to draw, instead we give the camera intrinsics and extrinsics, we also pass a size parameter that sets up the size of the cube
+void drawCube(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoeffs,
 			  float size)
 {
-	//!just make sure that each axis and the cube are distinctly colored
+	//initialise the dataset where we store our vertices
+	vector<Point3f> points (8);
+	
+	//Define the (world) points needed to draw coordinate axes
+	//lower square
+	points[0] = Point3f(0, 0, 0); //bottomleft
+	points[1] = Point3f(size, 0, 0); //bottomright
+	points[2] = Point3f(0, size, 0); //topleft
+	points[3] = Point3f(size, size, 0);//topright
+
+	//upper square
+	points[4] = Point3f(0, 0, -size); //bottomleft
+	points[5] = Point3f(size, 0, -size); //bottomright
+	points[6] = Point3f(0, size, -size); //topleft
+	points[7] = Point3f(size, size, -size);//topright
+
+	//initialise datastructure for the output of our projection
+	vector<Point2f> transformedPoints (8);
+	//Transform the points from world to image coordinates
+	projectPointsExplicit(points, cameraMatrix, rvec, tvec, distCoeffs, transformedPoints);
+
+	//start drawing with the bottom and top faces
+	//0-1,0-2,3-1,3-2,
+	
+	line(image, transformedPoints[0], transformedPoints[1], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[0], transformedPoints[2], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[3], transformedPoints[1], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[3], transformedPoints[2], Scalar(0, 255, 255), 2, 8);
+	
+	//top faces
+	//4-5,4-6,7-5,7-6,
+	line(image, transformedPoints[4], transformedPoints[5], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[4], transformedPoints[6], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[7], transformedPoints[5], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[7], transformedPoints[6], Scalar(0, 255, 255), 2, 8);
+	
+	//add connecting lines 
+	//0-4,1-5,2-6,3-7,
+	line(image, transformedPoints[0], transformedPoints[4], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[1], transformedPoints[5], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[2], transformedPoints[6], Scalar(0, 255, 255), 2, 8);
+	line(image, transformedPoints[3], transformedPoints[7], Scalar(0, 255, 255), 2, 8);
+	//note this could be further abstracted to a "Cubeshape" function so the color and thickness would variable and the cube logic would be easily reusable, this is pointless for our purposes however.
+
+
 }
 
-//needs some comments
+//A wrapper for the postProcessing we're doing (though i suppose that may not be the correct term)
+//We simply pass on all the data we need for the drawing and calculation (so the image and the camera intrinsics and extrinsics
 void postProcessImage(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoeffs)
 {
-	drawAxes(image, cameraMatrix, rvec, tvec, distCoeffs, 50);
+	drawAxes(image, cameraMatrix, rvec, tvec, distCoeffs, 200);
+	drawCube(image, cameraMatrix, rvec, tvec, distCoeffs, 50);
 }
