@@ -390,7 +390,7 @@ int main(int argc, char* argv[])
         }
     }
 
-	// ----------------------------Show the postprocessed images -----------------------------------
+	// ----------------------------Show the postprocessed images again, which contain drawn axes and a cube -----------------------------------
 	Mat image;
 	for(int imgIndex = 0; imgIndex < (int) s.imageList.size(); imgIndex++ )
 	{
@@ -405,8 +405,7 @@ int main(int argc, char* argv[])
 		//Do the desired postprocessing of the image
 		postProcessImage(image, cameraMatrix, rvecs[imgIndex - 1], tvecs[imgIndex - 1], distCoeffs);
 
-		//Show the image, wait for input
-		
+		//Show the image, wait for input	
 		imshow("Image View", image);
 		char c = (char)waitKey();
 		if( c  == ESC_KEY || c == 'q' || c == 'Q' )
@@ -440,6 +439,8 @@ int main(int argc, char* argv[])
     return 0;
 }
 
+//Compute the reprojection error for each separate image,
+//  and return the mean root square error.
 static double computeReprojectionErrors( const vector<vector<Point3f> >& objectPoints,
                                          const vector<vector<Point2f> >& imagePoints,
                                          const vector<Mat>& rvecs, const vector<Mat>& tvecs,
@@ -453,11 +454,9 @@ static double computeReprojectionErrors( const vector<vector<Point3f> >& objectP
 
     for( i = 0; i < (int)objectPoints.size(); ++i )
     {
-		//!! SUPER IMPORTANT SHIT RIGHT HERE! THIS MAY BE THE KEY
-		//! note this proves that the camera isn't the projection matrix but the intrinsics
-		//! meanwhile the rvec and tvec are the extrinsics
         projectPoints( Mat(objectPoints[i]), rvecs[i], tvecs[i], cameraMatrix,
                        distCoeffs, imagePoints2);
+		//The error is the distance between the observed and the reprojected points
         err = norm(Mat(imagePoints[i]), Mat(imagePoints2), CV_L2);
 
         int n = (int)objectPoints[i].size();
@@ -469,6 +468,8 @@ static double computeReprojectionErrors( const vector<vector<Point3f> >& objectP
     return std::sqrt(totalErr/totalPoints);
 }
 
+//Calculate the positions of the 'corners' based on board size and type
+//  (black/white crossing corners on a chessboard, else circle positions)
 static void calcBoardCornerPositions(Size boardSize, float squareSize, vector<Point3f>& corners,
                                      Settings::Pattern patternType /*= Settings::CHESSBOARD*/)
 {
@@ -494,8 +495,8 @@ static void calcBoardCornerPositions(Size boardSize, float squareSize, vector<Po
 }
 
 
-//! note you'll have to modify this to get the projected cube and axis co-ordinates to the drawing function
-//! you'll want to initialise them early on in the matrix, remember to clean them out after you've finished with a cycle
+//Run the OpenCV calibrateCamera function with the right parameters, and return the camera intrinsics and extrinsics.
+//Returns true iff the returned values are within double range (if not, something probably went wrong).
 static bool runCalibration( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat& distCoeffs,
                             vector<vector<Point2f> > imagePoints, vector<Mat>& rvecs, vector<Mat>& tvecs,
                             vector<float>& reprojErrs,  double& totalAvgErr)
@@ -515,16 +516,6 @@ static bool runCalibration( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat
     //Find intrinsic and extrinsic camera parameters
     double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix,
                                  distCoeffs, rvecs, tvecs, s.flag|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-	//!what is the distance coeffecient (distCoeffs)? -> Distortion coefficients, apparently
-	//! at this point we have the required information to calculate the relevant points we want to draw it would probably be best if we perform the calculation roughly around here
-    //! just perform the correct mathematical equations on the points we want to draw
-	//! as such you'll want to read up on the matrix implementation of this framework.
-
-	//! as far as i've been able to confirm the camera rvec and tvec are the values that we need (the intrinsics and extrinsics)
-	//! question is how to get at them
-
-	//! ProjectAxis(r,t,cameraMatrix, AxisPointBuffer);
-	//! ProjectCube(r,t,cameraMatrix, CubePointBuffer);
 	cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
 
     bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
@@ -535,7 +526,8 @@ static bool runCalibration( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat
     return ok;
 }
 
-// Print camera parameters to the output file
+//Print camera parameters to the output file
+//Depending on the settings, the extrinsic parameters and feature points may also be printed.
 static void saveCameraParams( Settings& s, Size& imageSize, Mat& cameraMatrix, Mat& distCoeffs,
                               const vector<Mat>& rvecs, const vector<Mat>& tvecs,
                               const vector<float>& reprojErrs, const vector<vector<Point2f> >& imagePoints,
@@ -614,10 +606,8 @@ static void saveCameraParams( Settings& s, Size& imageSize, Mat& cameraMatrix, M
     }
 }
 
-/*
-	Pass all the calibration parameters (also rvecs and tvecs) that are needed elsewhere,
-	and save them to file.
-*/
+//Run the calibration function, and if successful, save the results.
+//Passes on all the interesting parameters gained from calibration, and returns true if calibration succeeded.
 bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, vector<Mat>&  rvecs, vector<Mat>&  tvecs,
 						   Mat& distCoeffs,vector<vector<Point2f> > imagePoints )
 {
@@ -636,81 +626,63 @@ bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, vect
 }
 
 
-// ---------- Our (post-processing) functions -------------
-
-//this is where the magic happens
-//the comments inside the function will give you the info you need
+// ---------- Our new functions, used to draw axes and a cube in the image -------------
+//Projects points in 3D world coordinates to 2D screen coordinates (pixels).
+//Has a similar function as the OpenCV projectPoints function, but explicitly uses P = K [R t] FOR BONUS POINTS ;)
 void projectPointsExplicit(vector<Point3f>& inPoints, Mat& K, Mat& rotVector, Mat& t, Mat& distCoeffs, vector<Point2f>& outPoints)
-{
-	//!insert maths here
-	//!for now, simply use opencv built-in projection function
-	//!but if it works by explicitly using the formula, we get more points!
-	
-	//the old LAME implementation, instead of the NEW HOT N SEXY implementation
+{	
+	//This is how it would be done with the built-in function of OpenCV
 	//projectPoints(inPoints, rotVector, t, K, distCoeffs, outPoints);
-	
-	cout<< endl << rotVector<<endl<<endl;
-
-	//note how huge the translation vector is;
-	cout<< endl << t<<endl<<endl;
 	
 	//initialise the output data.
 	outPoints = vector<Point2f>(inPoints.size());
 	for( int i =0; i<inPoints.size(); i++)
 	{
+		//note that we have the rotation vector but not the rotation MATRIX, which we need, we will solve this first.
+		Mat r;
+		//this is handeled by an internal function because of pragmatism, also it's not strictly been defined that we need to do this by hand
+		Rodrigues(rotVector,r);
 
-    //note that we have the rotation vector but not the rotation MATRIX, which we need, we will solve this first.
-	Mat r;
-	//this is handeled by an internal function because of pragmatism, also it's not strictly been defined that we need to do this by hand
-	Rodrigues(rotVector,r);
+		// [R t] = Ex(trinsics)
+		//i.e, concatenate R and t horizontally
+		Mat Ex; 
+		hconcat(r,t,Ex);
+
+		//K*Ex = P
+		//multiply our intrinsics and extrinsics
+		Mat P = K * Ex;
+
+		//Output debug info
+		cout << "Projection matrix: " << P << endl <<endl;
+
+		//P*vectorWORLD = vectorIMAGE
+		//now we apply the transformation to our 3d point
+		//first we retrieve the 3d point
+		Mat input = (Mat_<double>(4,1) << inPoints[i].x,inPoints[i].y,inPoints[i].z,1);
+		
+		//debug print
+		cout << "World vector: " << input << endl <<endl;
 	
-	//output debug info
-	cout <<endl << r << endl <<endl;
-	// [r,t]= Ex
-	//i.e, concatenate r and t horizontally
-	Mat Ex; 
-	//again we use a function because filling a new 3*4  matrix by hand with the values of r on the first 3*3 and the values of t on the final 3*1 would be unpragmatic and also really silly
-	hconcat(r,t,Ex);
-
-	//more debug output
-	cout << Ex << endl <<endl;
-
-	//K* Ex = P
-	//multiply our intrinsics and extrinsics ( i may have switched up the names though please doublecheck, Tim)
-	Mat P = K * Ex;
-
-	//again we output debug info
-	cout << P << endl <<endl;
-
-	//P*vectorWORLD = vectorIMAGE
-	//now we apply the transformation to our 3d point
-
-	//first we retrieve the 3d point
-	Mat input = (Mat_<double>(4,1) << inPoints[i].x,inPoints[i].y,inPoints[i].z,1);
-	//debug print
-	cout << input << endl <<endl;
+		//we use a matrix but since it's a 3*1 matrix it's functionally the same as a vector.
+		Mat output;
+		//apply actual transformation
+		output = P*input;
 	
-	//we use a matrix but since it's a 3*1 matrix it's functionally the same as a vector.
-	Mat output;
-	//apply actual transformation
-	output = P*input;
-	
-	//DEBUG INFO!
-	cout << output << endl <<endl;
+		//DEBUG INFO!
+		cout << "Image vector: " << output << endl <<endl;
 
-	//Retrieve data from the output matrix/vector
-	double x=output.at<double>(0,0);
-	double y= output.at<double>(1,0);
-	double z= output.at<double>(2,0);
+		//Retrieve data from the output matrix/vector
+		double x=output.at<double>(0,0);
+		double y= output.at<double>(1,0);
+		double w= output.at<double>(2,0);
 
-	//we now have the values of z(x,y,1)
-	//so we devide by z and remove the third axis (since we don't need it after this)
-	double xMod = x/z;
-	double yMod = y/z;
+		//we now have the values of (x,y,w)
+		//so we devide by z and remove the third axis (since we don't need it after this)
+		double xMod = x/w;
+		double yMod = y/w;
 
-	//we save the output value so we can use it in the drawing logic
-	outPoints[i] = Point(xMod, yMod);
-
+		//we save the output value so we can use it in the drawing logic
+		outPoints[i] = Point(xMod, yMod);
 	}
 
 }
@@ -790,7 +762,7 @@ void drawCube(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoef
 }
 
 //A wrapper for the postProcessing we're doing (though i suppose that may not be the correct term)
-//We simply pass on all the data we need for the drawing and calculation (so the image and the camera intrinsics and extrinsics
+//We simply pass on all the data we need for the drawing and calculation (so the image and the camera intrinsics and extrinsics)
 void postProcessImage(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoeffs)
 {
 	drawAxes(image, cameraMatrix, rvec, tvec, distCoeffs, 200);
