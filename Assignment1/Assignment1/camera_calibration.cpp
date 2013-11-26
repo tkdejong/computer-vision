@@ -11,21 +11,28 @@
 using namespace cv;
 using namespace std;
 
+//Prints basic usage instructions
 static void help()
 {
-    cout <<  "This is a camera calibration sample." << endl
+    cout <<  "This program is used for camera calibration." << endl
          <<  "Usage: calibration configurationFile"  << endl
-         <<  "Near the sample file you'll find the configuration file, which has detailed help of "
-             "how to edit it.  It may be any OpenCV supported file format XML/YAML." << endl;
+         <<  "To use the default configuration, this program can be run without any arguments." << endl
+		 <<  "Press ESC to exit." << endl;
 }
+
+//Handles the reading / writing of the settings
+//  from / to an XML configuration file.
 class Settings
 {
 public:
     Settings() : goodInput(false) {}
+	//The used calibration pattern (we use chessboard)
     enum Pattern { NOT_EXISTING, CHESSBOARD, CIRCLES_GRID, ASYMMETRIC_CIRCLES_GRID };
+	//The type of source that is used as input
     enum InputType {INVALID, CAMERA, VIDEO_FILE, IMAGE_LIST};
 
-    void write(FileStorage& fs) const                        //Write serialization for this class
+	 //Write serialization for the settings
+    void write(FileStorage& fs) const                       
     {
         fs << "{" << "BoardSize_Width"  << boardSize.width
                   << "BoardSize_Height" << boardSize.height
@@ -47,7 +54,8 @@ public:
                   << "Input" << input
            << "}";
     }
-    void read(const FileNode& node)                          //Read serialization for this class
+	//Read serialization for the settings
+    void read(const FileNode& node)                          
     {
         node["BoardSize_Width" ] >> boardSize.width;
         node["BoardSize_Height"] >> boardSize.height;
@@ -66,6 +74,7 @@ public:
         node["Input_Delay"] >> delay;
         interprate();
     }
+	//Process the configuration input, check for illegal settings
     void interprate()
     {
         goodInput = true;
@@ -136,6 +145,7 @@ public:
         atImageList = 0;
 
     }
+	//Return the next image to be processed, depending on the input type
     Mat nextImage()
     {
         Mat result;
@@ -150,7 +160,7 @@ public:
 
         return result;
     }
-
+	//Read the contents of a file and return it as a vector of strings
     static bool readStringList( const string& filename, vector<string>& l )
     {
         l.clear();
@@ -181,8 +191,7 @@ public:
     bool showUndistorsed;       // Show undistorted images after calibration
     string input;               // The input ->
 
-
-
+	//Internal variables that describe the current state
     int cameraID;
     vector<string> imageList;
     int atImageList;
@@ -193,10 +202,9 @@ public:
 
 private:
     string patternToUse;
-
-
 };
 
+//Override the opencv read function to allow for a default value
 static void read(const FileNode& node, Settings& x, const Settings& default_value = Settings())
 {
     if(node.empty())
@@ -205,89 +213,90 @@ static void read(const FileNode& node, Settings& x, const Settings& default_valu
         x.read(node);
 }
 
+//Current state of the program
+//DETECTION: only try to find and draw on the checkerboard
+//CAPTURING: same as detection, but also start storing images for calibration
+//CALIBRATED: the calibration is done
 enum { DETECTION = 0, CAPTURING = 1, CALIBRATED = 2 };
 
+//Function that calibrates the camera from a set of images and saves the found values to file.
 bool runCalibrationAndSave(Settings& s, Size imageSize, Mat&  cameraMatrix, vector<Mat>&  rvecs, vector<Mat>&  tvecs,
 						   Mat& distCoeffs, vector<vector<Point2f> > imagePoints );
 //Post-processing function, to add e.g. 3D drawings to an image
 void postProcessImage(Mat& image, Mat& cameraMatrix, Mat& rvec, Mat& tvec, Mat& distCoeffs);
 
-
+//Entry point of execution
 int main(int argc, char* argv[])
 {
     help();
+	//Read the settings
     Settings s;
     const string inputSettingsFile = argc > 1 ? argv[1] : "default.xml";
-    FileStorage fs(inputSettingsFile, FileStorage::READ); // Read the settings
+    FileStorage fs(inputSettingsFile, FileStorage::READ); 
     if (!fs.isOpened())
     {
         cout << "Could not open the configuration file: \"" << inputSettingsFile << "\"" << endl;
         return -1;
     }
     fs["Settings"] >> s;
-    fs.release();                                         // close Settings file
+    fs.release();
 
+	//Check for problems with the settings
     if (!s.goodInput)
     {
         cout << "Invalid input detected. Application stopping. " << endl;
         return -1;
     }
 
+	//In imagePoints, the data necessary for calibration is saved of each image that is used
     vector<vector<Point2f> > imagePoints;
+	//Keep track of the intrinsics (cameraMatrix) and distortion
     Mat cameraMatrix, distCoeffs;
-	//Keep track of the [R t] matrix components in each view
+	//Keep track of the [R t] matrix components
 	vector<Mat> rvecs, tvecs;
     Size imageSize;
-	//!I think the statement below should be reversed (DETECTION : CAPTURING)
+	//If an image list is the input, capturing starts right away (no key press needed)
     int mode = s.inputType == Settings::IMAGE_LIST ? CAPTURING : DETECTION;
     clock_t prevTimestamp = 0;
     const Scalar RED(0,0,255), GREEN(0,255,0);
     const char ESC_KEY = 27;
 
+	//Main execution loop
     for(int i = 0;;++i)
     {
-      Mat view;
-      bool blinkOutput = false;
+		//The view is the image being processed in this loop cycle
+		Mat view;
+		bool blinkOutput = false;
 
-      view = s.nextImage();
+		view = s.nextImage();
 
-      //-----  If no more image, or got enough, then stop calibration and show result -------------
-	  //!every step we calibrate including the final step. -> at least for an image list, calibration is only done once
-	  //!presumedly the calibration doesn't quite work when we perform it first time.
-	 
-      if( mode == CAPTURING && imagePoints.size() >= (unsigned)s.nrFrames )
-      {
-		  //!check to see if we're capturing webcam data
-
-		  //!note, we don't actually send the image when we "calibrate".
-		  //!imagepoints notably is the data found in a different part of the program
-		  //!that part being the "find[stuff]" functions, in our case "findcheckerboardcorners"
-		  //!that function is later on in the code.
-		  //!upon further inspection i'm less certain about it though i still suspect my previous observation to be correct
-		  //!It is however a moot point for our purposes (since we do not need the imagepoints nor the location where it is used)
-          if( runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints))
-              mode = CALIBRATED;
-          else
-              mode = DETECTION;
-      }
-      if(view.empty())          // If no more images then run calibration, save and stop loop.
-      {							//!the above is confusing because the loop isn't actually ended here, ever
-								//!instead the it ends the current cycle of the loop and saves the last results to the output file
-            if( imagePoints.size() > 0 )
-                runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints);
-			
-            break;
-      }
-
-
-        imageSize = view.size();  // Format input image.
+		//----- If enough images gathered, then stop calibration and show result -----
+		if( mode == CAPTURING && imagePoints.size() >= (unsigned)s.nrFrames )
+		{
+			//Try the final calibration with the gathered data			
+			if( runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints))
+				mode = CALIBRATED;
+			else
+				mode = DETECTION;
+		}
+		//Also calibrate if no more images are found 
+		if(view.empty())          
+		{							
+			if( imagePoints.size() > 0 )
+			{
+				//Try the final calibration with the gathered data
+				runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints);
+			}
+			break;
+		}
+		//Format the input image
+        imageSize = view.size();
         if( s.flipVertical )    flip( view, view, 0 );
 
+		//Try to find the calibration pattern in the input image
         vector<Point2f> pointBuf;
-
         bool found;
-        switch( s.calibrationPattern ) // Find feature points on the input format
-									   //! not sure why it checks this every single time in the loop since this is a constant variable
+        switch( s.calibrationPattern )
         {
         case Settings::CHESSBOARD:
             found = findChessboardCorners( view, s.boardSize, pointBuf,
@@ -303,33 +312,35 @@ int main(int argc, char* argv[])
             found = false;
             break;
         }
-		//!if the in the above lines calibration has been succesfull then we'll be able to find the correct points on the board.
-        if ( found)                // If done with success,
+
+		//If the pattern was found
+        if (found)
         {
-              // improve the found corners' coordinate accuracy for chessboard
-                if( s.calibrationPattern == Settings::CHESSBOARD)
-                {
-                    Mat viewGray;
-                    cvtColor(view, viewGray, CV_BGR2GRAY);
-                    cornerSubPix( viewGray, pointBuf, Size(11,11),
-                        Size(-1,-1), TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 30, 0.1 ));
-                }
+			//Improve the found corners' coordinate accuracy for chessboard
+			if( s.calibrationPattern == Settings::CHESSBOARD)
+			{
+				Mat viewGray;
+				cvtColor(view, viewGray, CV_BGR2GRAY);
+				cornerSubPix( viewGray, pointBuf, Size(11,11),
+					Size(-1,-1), TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 30, 0.1 ));
+			}
+			//For camera only take new samples after the set delay time
+			if( mode == CAPTURING &&  
+				(!s.inputCapture.isOpened() || clock() - prevTimestamp > s.delay*1e-3*CLOCKS_PER_SEC) )
+			{
+				imagePoints.push_back(pointBuf);
+				prevTimestamp = clock();
+				blinkOutput = s.inputCapture.isOpened();
+			}
 
-                if( mode == CAPTURING &&  // For camera only take new samples after delay time
-                    (!s.inputCapture.isOpened() || clock() - prevTimestamp > s.delay*1e-3*CLOCKS_PER_SEC) )
-                {
-                    imagePoints.push_back(pointBuf);
-                    prevTimestamp = clock();
-                    blinkOutput = s.inputCapture.isOpened();
-                }
-
-                // Draw the corners. !(note that the points are already calculated)
-				//!this is also the point where we want to draw our output 
-				//!(note that we don't actually output the resulting image untill later_
-                drawChessboardCorners( view, s.boardSize, Mat(pointBuf), found );
-				//!drawAxis(view, AxisPointBuff)
-				//!drawCube(view, CubePointBuff)
-				//char c = (char)waitKey();
+			//Draw the corners of the pattern
+			drawChessboardCorners( view, s.boardSize, Mat(pointBuf), found );
+			//For each image after the first, do a progressive calibration (with the data gathered so far).
+			//The calibration output is used to draw the coordinate axes and a cube in real-time
+			if (imagePoints.size() > 1) {
+				runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints);
+				postProcessImage(view, cameraMatrix, rvecs[rvecs.size() - 1], tvecs[rvecs.size() - 1], distCoeffs);
+			}
         }
 
         //----------------------------- Output Text ------------------------------------------------
@@ -339,6 +350,7 @@ int main(int argc, char* argv[])
         Size textSize = getTextSize(msg, 1, 1, 1, &baseLine);
         Point textOrigin(view.cols - 2*textSize.width - 10, view.rows - 2*baseLine - 10);
 
+		//When capturing, the progress in captured frames is shown
         if( mode == CAPTURING )
         {
             if(s.showUndistorsed)
@@ -349,6 +361,7 @@ int main(int argc, char* argv[])
 
         putText( view, msg, textOrigin, 1, 1, mode == CALIBRATED ?  GREEN : RED);
 
+		//The output is 'blinked' to notify that frame has been captured
         if( blinkOutput )
             bitwise_not(view, view);
 
@@ -360,16 +373,6 @@ int main(int argc, char* argv[])
         }
 
         //------------------------------ Show image and check for input commands -------------------
-		//!this is where the image will be drawn
-		//!this is neither the position where we calculate the positions or modify the output image as the required info is gone
-		//!not to mention it would be an improper location (though i suppose that's a minor grievance)
-
-		//testing real-time reprojection -> should be @ 'if found'
-		if (imagePoints.size() > 1) {
-			runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints);
-			postProcessImage(view, cameraMatrix, rvecs[rvecs.size() - 1], tvecs[rvecs.size() - 1], distCoeffs);
-		}
-
         imshow("Image View", view);
         char key = (char)waitKey(s.inputCapture.isOpened() ? 100 : s.delay);
 
@@ -379,6 +382,7 @@ int main(int argc, char* argv[])
         if( key == 'u' && mode == CALIBRATED )
            s.showUndistorsed = !s.showUndistorsed;
 
+		//Pressing 'g' starts the capturing when not in Image List mode
         if( s.inputCapture.isOpened() && key == 'g' )
         {
             mode = CAPTURING;
@@ -413,10 +417,12 @@ int main(int argc, char* argv[])
     if( s.inputType == Settings::IMAGE_LIST && s.showUndistorsed )
     {
         Mat view, rview, map1, map2;
+		//Calculate the transformations to counter the distortion
         initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(),
             getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, 1, imageSize, 0),
             imageSize, CV_16SC2, map1, map2);
 
+		//Undistort and show each image in the list
         for(int i = 0; i < (int)s.imageList.size(); i++ )
         {
             view = imread(s.imageList[i], 1);
