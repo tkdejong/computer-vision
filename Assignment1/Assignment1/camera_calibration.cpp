@@ -329,7 +329,7 @@ int main(int argc, char* argv[])
                 drawChessboardCorners( view, s.boardSize, Mat(pointBuf), found );
 				//!drawAxis(view, AxisPointBuff)
 				//!drawCube(view, CubePointBuff)
-				char c = (char)waitKey();
+				//char c = (char)waitKey();
         }
 
         //----------------------------- Output Text ------------------------------------------------
@@ -363,8 +363,15 @@ int main(int argc, char* argv[])
 		//!this is where the image will be drawn
 		//!this is neither the position where we calculate the positions or modify the output image as the required info is gone
 		//!not to mention it would be an improper location (though i suppose that's a minor grievance)
+
+		//testing real-time reprojection -> should be @ 'if found'
+		if (imagePoints.size() > 1) {
+			runCalibrationAndSave(s, imageSize,  cameraMatrix, rvecs, tvecs, distCoeffs, imagePoints);
+			postProcessImage(view, cameraMatrix, rvecs[rvecs.size() - 1], tvecs[rvecs.size() - 1], distCoeffs);
+		}
+
         imshow("Image View", view);
-        char key = (char)waitKey(s.inputCapture.isOpened() ? 5000 : s.delay);
+        char key = (char)waitKey(s.inputCapture.isOpened() ? 100 : s.delay);
 
         if( key  == ESC_KEY )
             break;
