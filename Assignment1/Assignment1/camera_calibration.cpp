@@ -163,6 +163,11 @@ public:
 	//Read the contents of a file and return it as a vector of strings
     static bool readStringList( const string& filename, vector<string>& l )
     {
+		cout << "Last 4 chars: " << filename.substr(filename.length() - 4, 4);
+		if (filename.substr(filename.length() - 4, 4).compare(".xml") != 0) {
+			return false;
+		}
+
         l.clear();
         FileStorage fs(filename, FileStorage::READ);
         if( !fs.isOpened() )
