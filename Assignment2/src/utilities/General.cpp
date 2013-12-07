@@ -18,7 +18,7 @@ const string General::CheckerboadVideo		= "checkerboard.avi";
 const string General::BackgroundVideoFile	= "background.avi";
 const string General::BackgroundImageFile	= "background.png";
 const string General::VideoFile				= "video.avi";
-const string General::IntrinsicsFile		= "config.xml";
+const string General::IntrinsicsFile		= "intrinsics.xml";//"config.xml";
 const string General::CheckerboadCorners	= "boardcorners.xml";
 const string General::ConfigFile			= "config.xml";
 
