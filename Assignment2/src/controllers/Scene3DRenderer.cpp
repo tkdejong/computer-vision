@@ -60,11 +60,13 @@ Scene3DRenderer::Scene3DRenderer(Reconstructor &r, const vector<Camera*> &cs) :
 	_ps_threshold = S;
 	_v_threshold = V;
 	_pv_threshold = V;
+	_ed_factor = 2;
 
 	createTrackbar("Frame", VIDEO_WINDOW, &_current_frame, _number_of_frames - 2);
 	createTrackbar("H", VIDEO_WINDOW, &_h_threshold, 255);
 	createTrackbar("S", VIDEO_WINDOW, &_s_threshold, 255);
 	createTrackbar("V", VIDEO_WINDOW, &_v_threshold, 255);
+	createTrackbar("E/D", VIDEO_WINDOW, &_ed_factor, 20);
 
 	createFloorGrid();
 	setTopView();
@@ -130,6 +132,9 @@ void Scene3DRenderer::processForeground(Camera* camera)
 	// Remove noise
 #ifndef USE_GRAPHCUTS
 	// Using Erosion and/or Dilation of the foreground image
+	erode(foreground, tmp, Mat(), Point(-1,-1), _ed_factor);
+	dilate(tmp, foreground, Mat(), Point(-1,-1), _ed_factor);
+
 #else
 	// Using Graph cuts on the foreground image
 #endif

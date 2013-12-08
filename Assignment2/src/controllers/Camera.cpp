@@ -52,7 +52,11 @@ bool Camera::initialize()
 	{
 		VideoCapture video = VideoCapture(_data_path + General::BackgroundVideoFile);
 		assert(video.isOpened());
-		video >> bg_image;
+
+		Mat tmp;
+		video >> tmp;
+		tmp.copyTo(bg_image);
+
 		if (bg_image.empty())
 		{
 			cout << "Unable to read: " << _data_path + General::BackgroundVideoFile;
