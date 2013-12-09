@@ -67,8 +67,8 @@ class Scene3DRenderer
 	int _v_threshold;
 	int _pv_threshold;
 
-	int _ed_factor;
-
+	int _e_factor;
+	int _d_factor;
 	// edge points of the virtual ground floor grid
 	std::vector<std::vector<cv::Point3i*> > _floor_grid;
 
@@ -352,10 +352,15 @@ public:
 		return _pv_threshold;
 	}
 
-	int getEDFactor() const
+	int getDFactor() const
 	{
-		return _ed_factor;
+		return _d_factor;
 	}
+	int getEFactor() const
+	{
+		return _e_factor;
+	}
+
 
 	void setPHThreshold(int phThreshold)
 	{
@@ -387,9 +392,14 @@ public:
 		_v_threshold = threshold;
 	}
 
-	void setEDFactor(int factor)
+	void setEFactor(int factor)
 	{
-		_ed_factor = factor;
+		_e_factor = factor;
+	}
+
+	void setDfactor(int factor)
+	{
+		_d_factor = factor;
 	}
 
 	const cv::Size& getBoardSize() const
