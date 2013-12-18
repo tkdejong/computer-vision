@@ -18,6 +18,8 @@
 #include "Scene3DRenderer.h"
 #include "Glut.h"
 
+#include "Clustering.h"
+
 namespace nl_uu_science_gmt
 {
 

@@ -140,6 +140,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\Clustering.cpp" />
     <ClCompile Include="src\controllers\arcball.cpp" />
     <ClCompile Include="src\controllers\Camera.cpp" />
     <ClCompile Include="src\controllers\Glut.cpp" />
@@ -151,6 +152,7 @@
   <ItemGroup>
     <ClInclude Include="include\arcball.h" />
     <ClInclude Include="include\Camera.h" />
+    <ClInclude Include="include\Clustering.h" />
     <ClInclude Include="include\General.h" />
     <ClInclude Include="include\Glut.h" />
     <ClInclude Include="include\Reconstructor.h" />

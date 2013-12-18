@@ -93,6 +93,7 @@ void VoxelReconstruction::run(int argc, char** argv)
 
 	Reconstructor reconstructor(_cam_views);
 	Scene3DRenderer scene3d(reconstructor, _cam_views);
+	Clustering clustering(scene3d, 4);
 	Glut glut(scene3d);
 
 #ifdef __linux__
