@@ -141,11 +141,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\Clustering.cpp" />
+    <ClCompile Include="src\ColorModel.cpp" />
     <ClCompile Include="src\controllers\arcball.cpp" />
     <ClCompile Include="src\controllers\Camera.cpp" />
     <ClCompile Include="src\controllers\Glut.cpp" />
     <ClCompile Include="src\controllers\Reconstructor.cpp" />
     <ClCompile Include="src\controllers\Scene3DRenderer.cpp" />
+    <ClCompile Include="src\MeanColorModel.cpp" />
     <ClCompile Include="src\utilities\General.cpp" />
     <ClCompile Include="src\VoxelReconstruction.cpp" />
   </ItemGroup>
@@ -153,8 +155,10 @@
     <ClInclude Include="include\arcball.h" />
     <ClInclude Include="include\Camera.h" />
     <ClInclude Include="include\Clustering.h" />
+    <ClInclude Include="include\ColorModel.h" />
     <ClInclude Include="include\General.h" />
     <ClInclude Include="include\Glut.h" />
+    <ClInclude Include="include\MeanColorModel.h" />
     <ClInclude Include="include\Reconstructor.h" />
     <ClInclude Include="include\Scene3DRenderer.h" />
     <ClInclude Include="include\VoxelReconstruction.h" />
