@@ -11,6 +11,9 @@ Clustering::Clustering(Scene3DRenderer& scene3d, int K) :
 {
 	//Set the (color)models vector to the amount of tracked clusters
 	//_models.resize(_K);
+	//Keep the camera's stored for future use
+	_cams = _scene3d.getCameras();
+
 	initializeColorModel();
 }
 
@@ -136,15 +139,16 @@ void Clustering::initializeColorModel()
 	}
 
 	//Now make a color model for each cluster
-	for (int m = 0; m < _models.size(); m++)
+	for (int m = 0; m < _K; m++)
 	{
 		//Use a simple 'mean color' model for each cluster
 		//TODO implement more advanced color model (like GMM)
-		_models[m] = MeanColorModel(clusters[m]);
+		_models.push_back(MeanColorModel(getVoxelColorsBunchedBGR(clusters[m]), m));
+		
+		//Visualize the color models
+		_models[m].visualisationImage();
 	}
 
-	//MeanColorModel cm = MeanColorModel(voxels);
-	//cout << "Testing MeanColorModel: distance to red is " << cm.distanceTo(Scalar(0,0,255)) << endl << endl;
 }
 
 
@@ -175,6 +179,77 @@ bool Clustering::isLocalMinimum(Mat& centers)
 	}
 	//If no two cluster centers were too close, the clustering was probably OK
 	return false;
+}
+
+//Reprojects the voxels to each camera, to get the corresponding pixels.
+//The BGR values of the visible pixels (not occluded, in vield of vision) are returned.
+vector<vector<Scalar>> Clustering::getVoxelColorsBGR(vector<Reconstructor::Voxel*> voxels)
+{
+	//First, get the current frames of the cameras
+	vector<Mat> frames (_cams.size());
+	for (int c = 0; c < _cams.size(); c++)
+	{
+		frames[c] = _cams[c]->getFrame();
+	}
+
+
+	//Then, check the pixels for each voxel
+	vector<vector<Scalar>> voxelColors;
+	for (int v = 0; v < voxels.size(); v++)
+	{
+		//Pixel colors for this voxel
+		vector<Scalar> colors;
+
+		for (int c = 0; c < _cams.size(); c++)
+		{
+			//Check if the voxel is within the camera angle and not occluded
+			//TODO: actually add occlusion detection
+			if (voxels[v]->valid_camera_projection[c])
+			{
+				Point pixel = voxels[v]->camera_projection[c];
+				Vec3b values = frames[c].at<Vec3b>(pixel);
+				colors.push_back(Scalar(values[0], values[1], values[2]));
+				cout << "color " << colors[0] << endl;
+			}
+		}
+
+		voxelColors.push_back(colors);
+	}
+
+	return voxelColors;
+}
+
+//Determines the voxels' corresponding pixel colors (just like getVoxelColorsBGR),
+//  but returns all BGR color values bunched together in a single vector.
+//This is more useful for building a color model, instead of tracking single voxels.
+vector<Scalar> Clustering::getVoxelColorsBunchedBGR(vector<Reconstructor::Voxel*> voxels)
+{
+	//First, get the current frames of the cameras
+	vector<Mat> frames (_cams.size());
+	for (int c = 0; c < _cams.size(); c++)
+	{
+		frames[c] = _cams[c]->getFrame();
+	}
+
+
+	//Then, gather all pixel colors corresponding to any of the given voxels
+	vector<Scalar> colors;
+	for (int v = 0; v < voxels.size(); v++)
+	{
+		for (int c = 0; c < _cams.size(); c++)
+		{
+			//Check if the voxel is within the camera angle and not occluded
+			//TODO: actually add occlusion detection
+			if (voxels[v]->valid_camera_projection[c])
+			{
+				Point pixel = voxels[v]->camera_projection[c];
+				Vec3b values = frames[c].at<Vec3b>(pixel);
+				colors.push_back(Scalar(values[0], values[1], values[2]));
+			}
+		}
+	}
+
+	return colors;
 }
 
 } // end namespace nl_uu_science_gmt

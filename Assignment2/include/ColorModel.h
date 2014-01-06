@@ -9,5 +9,6 @@ public:
 	//ColorModel(void);
 	virtual ~ColorModel(void);
 	virtual float distanceTo(Scalar) = 0;
+	virtual Mat& visualisationImage() = 0;
 };
 

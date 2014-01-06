@@ -12,9 +12,11 @@ using namespace nl_uu_science_gmt;
 class MeanColorModel : public ColorModel
 {
 	Scalar _meanColor;
+	int _model_nr;
 public:
-	MeanColorModel(vector<Reconstructor::Voxel*>);
+	MeanColorModel(vector<Scalar>, int);
 	virtual ~MeanColorModel(void);
 
 	float distanceTo(Scalar);
+	Mat& visualisationImage();
 };

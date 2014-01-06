@@ -19,13 +19,16 @@ class Clustering
 {
 	Scene3DRenderer &_scene3d;
 	int _K;
-	vector<ColorModel> _models;
+	vector<MeanColorModel> _models;
+	vector<Camera*> _cams;
 
 public:
 	Clustering(Scene3DRenderer& scene3d, int);
 	virtual ~Clustering(void);
 	void initializeColorModel();
 	bool isLocalMinimum(Mat& centers);
+	vector<vector<Scalar>> Clustering::getVoxelColorsBGR(vector<Reconstructor::Voxel*>);
+	vector<Scalar> Clustering::getVoxelColorsBunchedBGR(vector<Reconstructor::Voxel*>);
 };
 
 } // end namespace nl_uu_science_gmt
