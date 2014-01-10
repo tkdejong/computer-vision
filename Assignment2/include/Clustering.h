@@ -26,6 +26,8 @@ public:
 	Clustering(Scene3DRenderer& scene3d, int);
 	virtual ~Clustering(void);
 	void initializeColorModel();
+	void RunTracking();
+	void generate();
 	bool isLocalMinimum(Mat& centers);
 	vector<vector<Scalar>> Clustering::getVoxelColorsBGR(vector<Reconstructor::Voxel*>);
 	vector<Scalar> Clustering::getVoxelColorsBunchedBGR(vector<Reconstructor::Voxel*>);

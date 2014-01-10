@@ -43,6 +43,7 @@ float MeanColorModel::distanceTo(Scalar color)
 //In this case, it just shows the mean color.
 Mat& MeanColorModel::visualisationImage()
 {
+
 	Mat image = Mat(200, 200, CV_8UC3);
 	image = _meanColor;
 	imshow("Model #" + _model_nr, image);

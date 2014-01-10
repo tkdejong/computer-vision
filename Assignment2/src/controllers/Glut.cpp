@@ -540,7 +540,7 @@ void Glut::update(int v)
 {
 	char key = waitKey(10);
 	keyboard(key, 0, 0);  // call glut key handler :)
-
+	//somewhere in here do the clustering logic
 	Scene3DRenderer& scene3d = _glut->getScene3d();
 	if (scene3d.isQuit())
 	{

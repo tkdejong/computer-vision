@@ -93,14 +93,15 @@ void VoxelReconstruction::run(int argc, char** argv)
 
 	Reconstructor reconstructor(_cam_views);
 	Scene3DRenderer scene3d(reconstructor, _cam_views);
-	Clustering clustering(scene3d, 4);
 	Glut glut(scene3d);
-
+	Clustering clustering(scene3d, 2);
 #ifdef __linux__
 	glut.initializeLinux(SCENE_WINDOW.c_str(), argc, argv);
 #elif defined _WIN32
 	glut.initializeWindows(SCENE_WINDOW.c_str());
 	glut.mainLoopWindows();
+	
+
 #endif
 }
 
