@@ -208,7 +208,7 @@ void Clustering::RunTracking()
 		//Mat labels;
 		Mat centers;
 
-		vector<Scalar> colors =getVoxelColorsBunchedBGR(voxels);
+		vector<vector<Scalar>> colors =getVoxelColorsBGR(voxels);
 		vector<int> templabels = vector<int>();
 		vector<Point3i> average;
 		
@@ -221,14 +221,18 @@ void Clustering::RunTracking()
 		for(int v = 0; v<voxels.size(); v++)
 		{
 			vector<float> divergence;
+
+			Vector<Scalar> VoxelColors = colors[v];
 			for (int k = 0; k< _K; k++)
 			{
-//				float a = _models[k].distanceTo(colors[(v*4)]);
-//				float b = _models[k].distanceTo(colors[(v*4)+1]);
-				float c = _models[k].distanceTo(colors[(v*4)+2]);
-//				float d = _models[k].distanceTo(colors[(v*4)+3]);
+				int size =VoxelColors.size();
+				float count = 0;
+				for (int c =0; c<size; c++)
+				{
+					count+= _models[k].distanceTo(VoxelColors[c]); 
+				}
 
-				float averageDivergence = c;//(a+b+c+d)/4;
+				float averageDivergence = count/size;//(a+b+c+d)/4;
 				divergence.push_back(averageDivergence);
 			}
 			int index =0;
