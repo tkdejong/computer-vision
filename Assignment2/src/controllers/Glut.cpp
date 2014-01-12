@@ -816,8 +816,18 @@ void Glut::drawVoxels()
 	vector<Reconstructor::Voxel*> voxels = _glut->getScene3d().getReconstructor().getVisibleVoxels();
 	for (size_t v = 0; v < voxels.size(); v++)
 	{
-		glColor4f(0.5f, 0.5f, 0.5f, 0.5f);
+		//Show what voxels are at torso height (used in color models and for each initial labeling)
+		if (voxels[v]->z > 750 && voxels[v]->z < 1450)
+		{
+			glColor4f(0.0f, 0.0f, 0.0f, 0.0f);
+		}
+		else 
+		{
+			glColor4f(0.5f, 0.5f, 0.5f, 0.5f);
+		}
+		
 		glVertex3f((GLfloat) voxels[v]->x, (GLfloat) voxels[v]->y, (GLfloat) voxels[v]->z);
+		
 	}
 
 	glEnd();

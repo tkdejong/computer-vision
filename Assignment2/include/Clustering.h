@@ -3,11 +3,10 @@
 #include <vector>
 
 #include "opencv2/opencv.hpp"
-//#include "opencv2/core/core.hpp"
 
 #include "Scene3DRenderer.h"
-#include "ColorModel.h"
-#include "MeanColorModel.h"
+#include "ColorHistogram.h"
+
 
 using namespace std;
 using namespace cv;
@@ -19,8 +18,11 @@ class Clustering
 {
 	Scene3DRenderer &_scene3d;
 	int _K;
-	vector<MeanColorModel> _models;
+	vector<ColorHistogram> _models;
 	vector<Camera*> _cams;
+
+	int _min_z;
+	int _max_z;
 
 public:
 	Clustering(Scene3DRenderer& scene3d, int);
@@ -31,6 +33,8 @@ public:
 	bool isLocalMinimum(Mat& centers);
 	vector<vector<Scalar>> Clustering::getVoxelColorsBGR(vector<Reconstructor::Voxel*>);
 	vector<Scalar> Clustering::getVoxelColorsBunchedBGR(vector<Reconstructor::Voxel*>);
+	vector<vector<Scalar>> Clustering::getVoxelColorsHSV(vector<Reconstructor::Voxel*>);
+	vector<Scalar> Clustering::getVoxelColorsBunchedHSV(vector<Reconstructor::Voxel*>);
 };
 
 } // end namespace nl_uu_science_gmt

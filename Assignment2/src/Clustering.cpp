@@ -11,6 +11,13 @@ namespace nl_uu_science_gmt
 Clustering::Clustering(Scene3DRenderer& scene3d, int K) :
 	_scene3d(scene3d), _K(K)
 {
+	//Only voxels of (approximately) torso height are used for the color models,
+	// and for the inital labeling in each tracking step.
+	//This is to remove the noise (shadows) around the feet, and the face that most jeans have similar colors.
+	//These voxels drawn shown as black by Glut.cpp
+	_min_z = 750;
+	_max_z = 1450;
+
 	//Set the (color)models vector to the amount of tracked clusters
 	//_models.resize(_K);
 	//Keep the camera's stored for future use
@@ -23,6 +30,7 @@ Clustering::Clustering(Scene3DRenderer& scene3d, int K) :
 Clustering::~Clustering(void)
 {
 }
+
 
 /*
 *  Initialize the color models that will be used to track the voxels.
@@ -140,18 +148,20 @@ void Clustering::initializeColorModel()
 
 	for (int v = 0; v < voxels.size(); v++)
 	{
-		//Add voxel #v to the cluster for which it was labeled
-		clusters[labels.at<int>(v)].push_back(voxels[v]);
+		//Add voxel #v to the cluster for which it was labeled,
+		// but only if it is of torso height.
+		if ((voxels[v]->z >= _min_z) && (voxels[v]->z <= _max_z))
+		{
+			clusters[labels.at<int>(v)].push_back(voxels[v]);
+		}
 	}
 
 	//Now make a color model for each cluster
 	for (int m = 0; m < _K; m++)
 	{
-		//Use a simple 'mean color' model for each cluster
-		//TODO implement more advanced color model (like GMM)
-		_models.push_back(MeanColorModel(getVoxelColorsBunchedBGR(clusters[m]), m));
-		
-		//Visualize the color models
+		//Use a Hue Histogram as color model
+		_models.push_back(ColorHistogram(getVoxelColorsBunchedHSV(clusters[m]), 20, m));	
+		//Visualize the color models, so we know what we are working with
 		_models[m].visualisationImage();
 	}
 
@@ -208,7 +218,7 @@ void Clustering::RunTracking()
 		//Mat labels;
 		Mat centers;
 
-		vector<vector<Scalar>> colors =getVoxelColorsBGR(voxels);
+		vector<vector<Scalar>> colors =getVoxelColorsHSV(voxels);
 		vector<int> templabels = vector<int>();
 		vector<Point3i> average;
 		
@@ -216,10 +226,11 @@ void Clustering::RunTracking()
 			{
 				average.push_back(Point3i(0,0,0));
 		}
-		//compare voxels to 
-		
+
+		//compare voxels to color models	
 		for(int v = 0; v<voxels.size(); v++)
 		{
+
 			vector<float> divergence;
 
 			Vector<Scalar> VoxelColors = colors[v];
@@ -274,11 +285,10 @@ void Clustering::RunTracking()
 			Point2f position = offset + (scale * Point2f(average[i].x, average[i].y));
 		
 			
-			//Draw the core as a circle
-		
-		circle(clusterImage, position, 5, Scalar(255, 255, 255), CV_FILLED, 8);
-		circle(clusterImage, position, 2, drawcolors[i], CV_FILLED, 8);
-		textOutput<<"Core:"<< i+1<< "  X:"<< position.x << " Y:" << position.y << "  ||  ";
+			//Draw the center of each core (center of label/group/cluster) as a circle	
+			circle(clusterImage, position, 5, Scalar(255, 255, 255), CV_FILLED, 8);
+			circle(clusterImage, position, 2, drawcolors[i], CV_FILLED, 8);
+			textOutput<<"Core:"<< i+1<< "  X:"<< position.x << " Y:" << position.y << "  ||  ";
 		}
 		textOutput<<endl;
 		int x  = 0;
@@ -395,7 +405,6 @@ vector<vector<Scalar>> Clustering::getVoxelColorsBGR(vector<Reconstructor::Voxel
 				Point pixel = voxels[v]->camera_projection[c];
 				Vec3b values = frames[c].at<Vec3b>(pixel);
 				colors.push_back(Scalar(values[0], values[1], values[2]));
-				cout << "color " << colors[0] << endl;
 			}
 		}
 
@@ -415,6 +424,85 @@ vector<Scalar> Clustering::getVoxelColorsBunchedBGR(vector<Reconstructor::Voxel*
 	for (int c = 0; c < _cams.size(); c++)
 	{
 		frames[c] = _cams[c]->getFrame();
+	}
+
+
+	//Then, gather all pixel colors corresponding to any of the given voxels
+	vector<Scalar> colors;
+	for (int v = 0; v < voxels.size(); v++)
+	{
+		for (int c = 0; c < _cams.size(); c++)
+		{
+			//Check if the voxel is within the camera angle and not occluded
+			//TODO: actually add occlusion detection
+			if (voxels[v]->valid_camera_projection[c])
+			{
+				Point pixel = voxels[v]->camera_projection[c];
+				Vec3b values = frames[c].at<Vec3b>(pixel);
+				colors.push_back(Scalar(values[0], values[1], values[2]));
+			}
+		}
+	}
+
+	return colors;
+}
+
+//Reprojects the voxels to each camera, to get the corresponding pixels.
+//The color values of the visible pixels (not occluded, in vield of vision) are returned.
+//Contains an extra conversion step to go from BGR to HSV.
+vector<vector<Scalar>> Clustering::getVoxelColorsHSV(vector<Reconstructor::Voxel*> voxels)
+{
+	//First, get the current frames of the cameras, in HSV
+	vector<Mat> BGRframes (_cams.size());
+	vector<Mat> frames (_cams.size());
+	for (int c = 0; c < _cams.size(); c++)
+	{
+		BGRframes[c] = _cams[c]->getFrame();
+		//Convert each frame from BGR to HSV, to get HSV values for the voxels
+		frames[c] = BGRframes[c].clone();
+		cvtColor(frames[c], frames[c], CV_BGR2HSV);
+	}
+
+	//Then, check the pixels for each voxel
+	vector<vector<Scalar>> voxelColors;
+	for (int v = 0; v < voxels.size(); v++)
+	{
+		//Pixel colors for this voxel
+		vector<Scalar> colors;
+
+		for (int c = 0; c < _cams.size(); c++)
+		{
+			//Check if the voxel is within the camera angle and not occluded
+			//TODO: actually add occlusion detection
+			if (voxels[v]->valid_camera_projection[c])
+			{
+				Point pixel = voxels[v]->camera_projection[c];
+				Vec3b values = frames[c].at<Vec3b>(pixel);
+				colors.push_back(Scalar(values[0], values[1], values[2]));
+			}
+		}
+
+		voxelColors.push_back(colors);
+	}
+	
+	return voxelColors;
+}
+
+//Determines the voxels' corresponding pixel colors (just like getVoxelColorsBGR),
+//  but returns all BGR color values bunched together in a single vector.
+//This is more useful for building a color model, instead of tracking single voxels.
+//Contains an extra conversion step to go from BGR to HSV
+vector<Scalar> Clustering::getVoxelColorsBunchedHSV(vector<Reconstructor::Voxel*> voxels)
+{
+	//First, get the current frames of the cameras, in HSV
+	vector<Mat> BGRframes (_cams.size());
+	vector<Mat> frames (_cams.size());
+	for (int c = 0; c < _cams.size(); c++)
+	{
+		BGRframes[c] = _cams[c]->getFrame();
+		//Convert each frame from BGR to HSV, to get HSV values for the voxels
+		frames[c] = BGRframes[c].clone();
+		cvtColor(frames[c], frames[c], CV_BGR2HSV);
 	}
 
 

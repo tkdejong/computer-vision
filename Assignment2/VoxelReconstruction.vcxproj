@@ -84,7 +84,7 @@
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>opencv_core246d.lib;opencv_highgui246d.lib;opencv_imgproc246d.lib;opencv_calib3d246d.lib;OpenGL32.lib;Glu32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opencv_core246d.lib;opencv_highgui246d.lib;opencv_imgproc246d.lib;opencv_calib3d246d.lib;opencv_ml246d.lib;OpenGL32.lib;Glu32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>lib;$(OPENCV_DIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -141,6 +141,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\Clustering.cpp" />
+    <ClCompile Include="src\ColorHistogram.cpp" />
     <ClCompile Include="src\ColorModel.cpp" />
     <ClCompile Include="src\controllers\arcball.cpp" />
     <ClCompile Include="src\controllers\Camera.cpp" />
@@ -155,6 +156,7 @@
     <ClInclude Include="include\arcball.h" />
     <ClInclude Include="include\Camera.h" />
     <ClInclude Include="include\Clustering.h" />
+    <ClInclude Include="include\ColorHistogram.h" />
     <ClInclude Include="include\ColorModel.h" />
     <ClInclude Include="include\General.h" />
     <ClInclude Include="include\Glut.h" />
