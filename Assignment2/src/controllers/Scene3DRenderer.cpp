@@ -48,7 +48,7 @@ Scene3DRenderer::Scene3DRenderer(Reconstructor &r, const vector<Camera*> &cs) :
 	_previous_camera = 0;
 
 	_number_of_frames = _cameras.front()->getFramesAmount();
-	_current_frame = 195;
+	_current_frame = 0;
 	_previous_frame = -1;
 
 	const int H = 0;

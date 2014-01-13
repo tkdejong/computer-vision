@@ -31,9 +31,8 @@ public:
 	void RunTracking();
 	void generate();
 	bool isLocalMinimum(Mat& centers);
-	vector<vector<Scalar>> Clustering::getVoxelColorsBGR(vector<Reconstructor::Voxel*>);
-	vector<Scalar> Clustering::getVoxelColorsBunchedBGR(vector<Reconstructor::Voxel*>);
-	vector<vector<Scalar>> Clustering::getVoxelColorsHSV(vector<Reconstructor::Voxel*>);
+
+	vector<Scalar> Clustering::getVoxelColors(Reconstructor::Voxel*, vector<Mat>);	
 	vector<Scalar> Clustering::getVoxelColorsBunchedHSV(vector<Reconstructor::Voxel*>);
 };
 
