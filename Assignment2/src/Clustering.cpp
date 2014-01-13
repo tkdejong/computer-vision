@@ -149,7 +149,7 @@ void Clustering::initializeColorModel()
 	for (int v = 0; v < voxels.size(); v++)
 	{
 		//Add voxel #v to the cluster for which it was labeled,
-		// but only if it is of torso height.
+		// but only if it is of torso height, because these voxels will give good distinctive colors.
 		if ((voxels[v]->z >= _min_z) && (voxels[v]->z <= _max_z))
 		{
 			clusters[labels.at<int>(v)].push_back(voxels[v]);
@@ -160,7 +160,7 @@ void Clustering::initializeColorModel()
 	for (int m = 0; m < _K; m++)
 	{
 		//Use a Hue Histogram as color model
-		_models.push_back(ColorHistogram(getVoxelColorsBunchedHSV(clusters[m]), 20, m));	
+		_models.push_back(ColorHistogram(getVoxelColorsBunchedHSV(clusters[m]), 30, m));	
 		//Visualize the color models, so we know what we are working with
 		_models[m].visualisationImage();
 	}
@@ -188,9 +188,9 @@ void Clustering::RunTracking()
 			Scalar(0, 0, 255),
 			Scalar(0, 255, 255)
 		};
-		//Scaling and offset from voxel (x,y) space to image space (to make it fit nicely in the image)
+	//Scaling and offset from voxel (x,y) space to image space (to make it fit nicely in the image)
 	Point2f offset = Point2f(300.0, 300.0);
-		//The voxel x and y range from -512*4 to 512*4
+	//The voxel x and y range from -512*4 to 512*4
 	float scale = 600.0 / (512 * 8);
 
 	ofstream textOutput;
@@ -200,6 +200,7 @@ void Clustering::RunTracking()
 	//iterate through all of the frames
 	for (int f = 0 ; f < _scene3d.getNumberOfFrames(); f++)
 	{
+
 		clusterImage = Scalar::all(0);
 		_scene3d.setCurrentFrame(f);
 		//Process frame
@@ -215,107 +216,157 @@ void Clustering::RunTracking()
 		_cams[3]->setVideoFrame(f);
 		
 		Mat voxeldata = Mat::zeros(voxels.size(), 2, CV_32F);
-		//Mat labels;
 		Mat centers;
 
-		vector<vector<Scalar>> colors =getVoxelColorsHSV(voxels);
-		vector<int> templabels = vector<int>();
+		vector<vector<Scalar>> colors = getVoxelColorsHSV(voxels);
+		vector<int> labels = vector<int>(voxels.size());
+		//The third dimension of average is used for the amount of samples over which the average is taken
 		vector<Point3i> average;
 		
 		for (int i=0; i<_K; i++)
-			{
-				average.push_back(Point3i(0,0,0));
+		{
+			average.push_back(Point3i(0,0,0));
 		}
 
 		//compare voxels to color models	
 		for(int v = 0; v<voxels.size(); v++)
 		{
 
-			vector<float> divergence;
-
-			Vector<Scalar> VoxelColors = colors[v];
-			for (int k = 0; k< _K; k++)
-			{
-				int size =VoxelColors.size();
-				float count = 0;
-				for (int c =0; c<size; c++)
-				{
-					count+= _models[k].distanceTo(VoxelColors[c]); 
-				}
-
-				float averageDivergence = count/size;//(a+b+c+d)/4;
-				divergence.push_back(averageDivergence);
-			}
-			int index =0;
-			float lowestdivergence = 9999999999; //should be infinity, arbitrary large number should work though.
-			
-			for (int i=0; i<_K; i++)
-			{
-				
-				if (divergence[i] < lowestdivergence){
-					index = i;
-					lowestdivergence = divergence[i];
-				}
-			}
-			templabels.push_back(index);
-			
-			average[index] = Point3i(voxels[v]->x+ average[index].x,voxels[v]->y + average[index].y, average[index].z +1);
-			
-			
 			Point2f position = offset + (scale * Point2f(voxels[v]->x,voxels[v]->y));
-			
-			circle(clusterImage, position, 2, drawcolors[index], CV_FILLED, 8);
-			//add point to image.
-
 			float data[2] = { (float) position.x, (float) position.y };
 			Mat point(1, 2, CV_32F, &data);
-
 			//Add the row values to the (zero-initialized) matrix, simply using '=' won't work
 			voxeldata.row(v) += point;
+
+			//For the initial labeling, only use voxels of torso-height, because they have distinctive colors
+			if ((voxels[v]->z >= _min_z) && (voxels[v]->z <= _max_z))
+			{
+				vector<float> divergence;
+
+				Vector<Scalar> VoxelColors = colors[v];
+				for (int k = 0; k< _K; k++)
+				{
+					int size = VoxelColors.size();
+					float count = 0;
+					for (int c =0; c<size; c++)
+					{
+						count+= _models[k].distanceTo(VoxelColors[c]); 
+					}
+
+					float averageDivergence = count/size;
+					divergence.push_back(averageDivergence);
+				}
+				int index =0;
+				float lowestdivergence = 9999999999; //should be infinity, arbitrary large number should work though.
+			
+				for (int i=0; i<_K; i++)
+				{	
+					if (divergence[i] < lowestdivergence){
+						index = i;
+						lowestdivergence = divergence[i];
+					}
+				}
+				labels[v] = index;
+				average[index] = Point3i(voxels[v]->x+ average[index].x,voxels[v]->y + average[index].y, average[index].z +1);
+			
+				circle(clusterImage, position, 2, drawcolors[index], CV_FILLED, 8);
+				//add point to image.
+			}
+			//For the voxels that aren't used for the initial clustering, just draw them as grey circles.
+			else
+			{	
+				circle(clusterImage, position, 2, Scalar(125, 125, 125), CV_FILLED, 8);
+			}
+			
 		}
 
-		
 
-		textOutput<< "frame:"<< f<< " -- ";
+		//Calculate and draw the initial cluster centers
+		vector<Point2f> initialCenters;
 		for (int i=0; i<_K; i++)
 		{
 			average[i].x = average[i].x / average[i].z;
 			average[i].y = average[i].y / average[i].z;
 
 			Point2f position = offset + (scale * Point2f(average[i].x, average[i].y));
-		
-			
+			initialCenters.push_back(position);
+				
 			//Draw the center of each core (center of label/group/cluster) as a circle	
 			circle(clusterImage, position, 5, Scalar(255, 255, 255), CV_FILLED, 8);
 			circle(clusterImage, position, 2, drawcolors[i], CV_FILLED, 8);
-			textOutput<<"Core:"<< i+1<< "  X:"<< position.x << " Y:" << position.y << "  ||  ";
+
 		}
-		textOutput<<endl;
-		int x  = 0;
 
 
 		//imshow("test", clusterImage);
 		outputVideo.write(clusterImage);
 		cout<< "writing video frame: "<< f+1 << "/" << _scene3d.getNumberOfFrames() <<endl;
 
-		//recluster and relabel voxels
-		kmeans(voxeldata,_K,templabels,TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER,10, 1.0), 4, KMEANS_USE_INITIAL_LABELS,centers);
-	
+
+		//   ---   Recluster and relabel the voxels
+
+
+		//Get ready to calculate new cluster centers
+		//The third dimension of newAverage is used for the amount of samples over which the average is taken
+		vector<Point3i> newAverage;	
+		for (int i=0; i<_K; i++)
+		{
+			newAverage.push_back(Point3i(0,0,0));
+		}
+
+		//Do a round of (re-)labeling the voxels to the closest initial cluster center
+		for (int v = 0; v < voxels.size(); v++)
+		{
+			double shortestDistance = 999999.9;
+			int closestCenter = 0;
+			Point2f position = offset + (scale * Point2f(voxels[v]->x,voxels[v]->y));
+
+			for (int i=0; i<_K; i++)
+			{
+				//Check if this center is closer, using Euclidean distance in the x-y plane
+				if (norm(initialCenters[i] - position) < shortestDistance)
+				{
+					closestCenter = i;
+					shortestDistance = norm(initialCenters[i] - position);
+				}
+			}
+
+			//Re-label
+			labels[v] = closestCenter;
+			//Start calculating the new cluster centers
+			newAverage[closestCenter] += Point3i(voxels[v]->x, voxels[v]->y, 1);
+		}
+
+		textOutput<< "frame:"<< f << " -- ";
+
+		//Now recalculate the cluster centers
+		for (int i=0; i<_K; i++)
+		{
+			newAverage[i].x = newAverage[i].x / newAverage[i].z;
+			newAverage[i].y = newAverage[i].y / newAverage[i].z;
+
+			Point2f position = offset + (scale * Point2f(newAverage[i].x, newAverage[i].y));
+			centers.push_back(position);
+			//Also write the core (cluster center) positions to the text file
+			textOutput<<"Core:"<< i+1<< "  X:"<< position.x << " Y:" << position.y << "  ||  ";
+		}
+		textOutput<<endl;
+
+		//kmeans(voxeldata,_K,labels,TermCriteria(CV_TERMCRIT_ITER, 3, 1.0), 1, KMEANS_USE_INITIAL_LABELS, centers);
 		clusterImage = Scalar::all(0);
 
-		
 		//Scaling and offset from voxel (x,y) space to image space (to make it fit nicely in the image)
 		Point2f offset = Point2f(300.0, 300.0);
 		//The voxel x and y range from -512*4 to 512*4
 		float scale = 600.0 / (512 * 8);
 
 		//Draw each voxel, projected on the ground plane (height was not used for clustering),
-		//  with the color of it's cluster
+		//  with the color of its cluster
 		for (int i = 0; i < voxeldata.rows; i++)
 		{
 			//Calculate the position in the image (image y axis is reversed!)
 			Point2f position = Point2f(voxeldata.at<float>(i, 0),voxeldata.at<float>(i, 1));
-			int cluster = templabels[i];
+			int cluster = labels[i];
 			
 			//Draw the voxel as a circle
 			circle(clusterImage, position, 2, drawcolors[cluster], CV_FILLED, 8);
@@ -331,6 +382,7 @@ void Clustering::RunTracking()
 			circle(clusterImage, position, 5, Scalar(255, 255, 255), CV_FILLED, 8);
 			circle(clusterImage, position, 4, drawcolors[i], CV_FILLED, 8);
 		}
+
 		outputVideoPostKmeans.write(clusterImage);
 		cout<< "writing 2nd video frame: "<< f+1 << "/" << _scene3d.getNumberOfFrames() <<endl;
 
@@ -347,6 +399,7 @@ void Clustering::RunTracking()
 	//kmeans the voxels
 	//
 }
+
 
 //Reports if the clustering ended up in a local minimum,
 //  this is an educated guess based on the locations of the cluster centers
@@ -465,6 +518,7 @@ vector<vector<Scalar>> Clustering::getVoxelColorsHSV(vector<Reconstructor::Voxel
 
 	//Then, check the pixels for each voxel
 	vector<vector<Scalar>> voxelColors;
+
 	for (int v = 0; v < voxels.size(); v++)
 	{
 		//Pixel colors for this voxel
@@ -484,7 +538,7 @@ vector<vector<Scalar>> Clustering::getVoxelColorsHSV(vector<Reconstructor::Voxel
 
 		voxelColors.push_back(colors);
 	}
-	
+
 	return voxelColors;
 }
 

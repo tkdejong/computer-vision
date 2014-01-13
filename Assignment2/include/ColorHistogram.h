@@ -14,6 +14,10 @@ class ColorHistogram: public ColorModel
 	vector<float> _bin;
 	float _bin_size;
 
+	int _v_bins;
+	vector<float> _v_bin;
+	float _v_bin_size;
+
 	int _model_nr;
 
 public:
