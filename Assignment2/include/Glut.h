@@ -25,6 +25,7 @@
 #include "General.h"
 #include "Scene3DRenderer.h"
 #include "Reconstructor.h"
+#include "Clustering.h"
 
 // i am not sure about the compatibility with this...
 #define MOUSE_WHEEL_UP   3
@@ -36,6 +37,7 @@ namespace nl_uu_science_gmt
 class Glut
 {
 	Scene3DRenderer &_scene3d;
+	Clustering &_clustering;
 
 	static Glut* _glut;
 
@@ -55,7 +57,7 @@ class Glut
 #endif
 
 public:
-	Glut(Scene3DRenderer &);
+	Glut(Scene3DRenderer &, Clustering &);
 	virtual ~Glut();
 
 #ifdef __linux__
@@ -79,6 +81,10 @@ public:
 	Scene3DRenderer& getScene3d() const
 	{
 		return _scene3d;
+	}
+	Clustering& getClustering() const
+	{
+		return _clustering;
 	}
 };
 

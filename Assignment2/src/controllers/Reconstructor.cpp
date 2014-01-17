@@ -96,8 +96,10 @@ void Reconstructor::initialize()
 				voxel->x = x;
 				voxel->y = y;
 				voxel->z = z;
+				voxel->cluster = -1;
 				voxel->camera_projection = vector<Point>(_cameras.size());
 				voxel->valid_camera_projection = vector<int>(_cameras.size(), 0);
+				voxel->occluded_from_camera = vector<bool>(_cameras.size(), false);
 
 				const int zp = ((z - zL) / _step);
 				const int yp = ((y - yL) / _step);

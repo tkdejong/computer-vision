@@ -15,8 +15,8 @@ namespace nl_uu_science_gmt
 
 Glut* Glut::_glut;
 
-Glut::Glut(Scene3DRenderer &s3d) :
-		_scene3d(s3d)
+Glut::Glut(Scene3DRenderer &s3d, Clustering &clustering) :
+		_scene3d(s3d), _clustering(clustering)
 {
 	// static pointer to this class so we can get to it from the static GL events
 	_glut = this;
@@ -540,8 +540,10 @@ void Glut::update(int v)
 {
 	char key = waitKey(10);
 	keyboard(key, 0, 0);  // call glut key handler :)
-	//somewhere in here do the clustering logic
-	Scene3DRenderer& scene3d = _glut->getScene3d();
+	//somewhere in here do the clustering logic --v
+	Clustering& clustering = _glut->getClustering();
+	Scene3DRenderer& scene3d = _glut->getScene3d();	
+
 	if (scene3d.isQuit())
 	{
 		// Quit signaled
@@ -571,6 +573,8 @@ void Glut::update(int v)
 		// If the current frame is different from the last iteration update stuff
 		scene3d.processFrame();
 		scene3d.getReconstructor().update();
+		// Added clustering step, to set the color of the voxels
+		clustering.processFrame();
 		scene3d.setPreviousFrame(scene3d.getCurrentFrame());
 	}
 	else if (scene3d.getHThreshold() != scene3d.getPHThreshold() || scene3d.getSThreshold() != scene3d.getPSThreshold()
@@ -816,7 +820,12 @@ void Glut::drawVoxels()
 	vector<Reconstructor::Voxel*> voxels = _glut->getScene3d().getReconstructor().getVisibleVoxels();
 	for (size_t v = 0; v < voxels.size(); v++)
 	{
-		glColor4f(0.5f, 0.5f, 0.5f, 0.5f);
+		//Use the voxel's color attribute, set by the clustering
+		glColor4f(
+			voxels[v]->color[0],
+			voxels[v]->color[1],
+			voxels[v]->color[2],
+			0.5f);
 		glVertex3f((GLfloat) voxels[v]->x, (GLfloat) voxels[v]->y, (GLfloat) voxels[v]->z);	
 	}
 

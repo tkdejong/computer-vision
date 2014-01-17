@@ -23,9 +23,12 @@ public:
 	struct Voxel
 	{
 		int x, y, z;
+		//Displayed color, result of the tracking
 		cv::Scalar color;
+		int cluster;
 		std::vector<cv::Point> camera_projection;
 		std::vector<int> valid_camera_projection;
+		std::vector<bool> occluded_from_camera;
 	};
 
 private:
